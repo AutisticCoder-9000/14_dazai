@@ -1,0 +1,148 @@
+// Set up study areas
+var cities = ee.FeatureCollection('FAO/GAUL/2015/level2')
+  .filter(ee.Filter.inList('ADM2_NAME', [
+    'Bangalore Urban',
+    'Mumbai Suburban',
+    'Pune',
+    'Kolkata',
+    'Chennai'
+  ]));
+
+// Get corresponding states
+var states = ee.FeatureCollection('FAO/GAUL/2015/level1')
+  .filter(ee.Filter.inList('ADM1_NAME', [
+    'Karnataka',
+    'Maharashtra',
+    'West Bengal',
+    'Tamil Nadu'
+  ]));
+
+// Time period
+var startDate = '2023-01-01';
+var endDate = '2023-12-31';
+
+// Function to mask clouds in LST data
+function maskClouds(image) {
+  var qa = image.select('QC');
+  var mask = qa.bitwiseAnd(1).eq(0);
+  return image.updateMask(mask);
+}
+
+// Get daytime LST data
+var daytimeLST = ee.ImageCollection('MODIS/061/MOD21A1D')
+  .filterDate(startDate, endDate)
+  .filterBounds(states)
+  .map(maskClouds)
+  .select('LST_1KM');
+
+// Get nighttime LST data
+var nighttimeLST = ee.ImageCollection('MODIS/061/MOD21A1N')
+  .filterDate(startDate, endDate)
+  .filterBounds(states)
+  .map(maskClouds)
+  .select('LST_1KM');
+
+// Get NDVI data
+var ndvi = ee.ImageCollection('MODIS/061/MOD13Q1')
+  .filterDate(startDate, endDate)
+  .filterBounds(states)
+  .select('NDVI');
+
+// Get land cover data
+var landcover = ee.Image('ESA/WorldCover/v200/2021');
+
+// Calculate mean temperatures
+var meanDayLST = daytimeLST.mean();
+var meanNightLST = nighttimeLST.mean();
+var meanNDVI = ndvi.mean();
+
+// Function to calculate UHI for a specific city
+function calculateCityUHI(cityFeature, stateGeometry) {
+  var cityGeometry = cityFeature.geometry();
+  var stateWithoutCity = stateGeometry.difference(cityGeometry);
+  
+  // Calculate state LST (excluding city)
+  var stateDayLST = meanDayLST.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: stateWithoutCity,
+    scale: 1000,
+    maxPixels: 1e9
+  });
+  
+  // Calculate city LST
+  var cityDayLST = meanDayLST.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: cityGeometry,
+    scale: 1000,
+    maxPixels: 1e9
+  });
+  
+  // Get temperature values
+  var cityTemp = ee.Number(cityDayLST.get('LST_1KM')).multiply(0.02);
+  var stateTemp = ee.Number(stateDayLST.get('LST_1KM')).multiply(0.02);
+  
+  // Calculate UHI intensity
+  var uhiIntensity = cityTemp.subtract(stateTemp);
+  
+  // Weight by NDVI and urban fraction
+  var urbanAreas = landcover.eq(50);
+  var urbanFraction = urbanAreas.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: cityGeometry,
+    scale: 1000,
+    maxPixels: 1e9
+  }).get('Map');
+  
+  var ndviWeight = meanNDVI.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: cityGeometry,
+    scale: 250,
+    maxPixels: 1e9
+  });
+  
+  // Final UHI index
+  var uhiIndex = uhiIntensity
+    .multiply(ee.Number(urbanFraction))
+    .multiply(ee.Number(1).subtract(ee.Number(ndviWeight.get('NDVI')).divide(10000)));
+  
+  return {
+    'cityName': cityFeature.get('ADM2_NAME'),
+    'uhiIndex': uhiIndex,
+    'cityTemp': cityTemp,
+    'stateTemp': stateTemp
+  };
+}
+
+// Calculate and display UHI for each city
+cities.toList(5).evaluate(function(cityList) {
+  cityList.forEach(function(city) {
+    var cityFeature = ee.Feature(city);
+    var stateName = cityFeature.get('ADM1_NAME');
+    var stateGeometry = states
+      .filter(ee.Filter.eq('ADM1_NAME', stateName))
+      .first()
+      .geometry();
+    
+    var uhiResults = calculateCityUHI(cityFeature, stateGeometry);
+    print('UHI Results for ' + uhiResults.cityName + ':', uhiResults);
+    
+    // Add visualization layers with transparency
+    var cityTemp = meanDayLST.clip(cityFeature.geometry());
+    Map.addLayer(cityTemp.updateMask(cityTemp.mask().multiply(0.7)), {
+      min: 290,
+      max: 310,
+      palette: ['blue', 'yellow', 'red']
+    }, 'Temperature - ' + uhiResults.cityName);
+    
+    // Add urban areas layer with transparency
+    var urbanAreas = landcover.eq(50).clip(cityFeature.geometry());
+    Map.addLayer(urbanAreas.updateMask(urbanAreas.mask().multiply(0.5)), {
+      min: 0,
+      max: 1,
+      palette: ['white', 'red']
+    }, 'Urban Areas - ' + uhiResults.cityName);
+  });
+});
+
+// Center map on India
+Map.setCenter(78.9629, 20.5937, 5);
