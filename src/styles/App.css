@@ -46,6 +46,67 @@ body, html {
   background: #e0e0e0;
 }
 
+/* Custom search controls */
+.custom-search-controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+}
 
+/* Style the search input container */
+.maplibre-search-box-container {
+  width: 300px;
+}
 
-/* 🔍 Zoom Controls */
+/* Style the search input */
+.maplibre-search-box-input {
+  width: 100%;
+  height: 60px;
+  padding: 0 20px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  font-size: 16px;
+}
+
+.maplibre-search-box-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+/* Style the results container */
+.maplibre-search-box-results-container {
+  margin-top: 5px;
+  border-radius: 4px;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Style individual result items */
+.maplibre-search-box-result {
+  padding: 10px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.maplibre-search-box-result:hover {
+  background-color: #f5f5f5;
+}
+
+.maplibre-search-box-result:last-child {
+  border-bottom: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .custom-search-controls {
+    width: calc(100% - 20px);
+    max-width: 300px;
+  }
+  
+  .maplibre-search-box-input {
+    height: 50px;
+    font-size: 14px;
+  }
+}
