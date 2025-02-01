@@ -1,0 +1,122 @@
+// Set up study area
+var karnataka = ee.FeatureCollection('FAO/GAUL/2015/level1')
+  .filter(ee.Filter.eq('ADM1_NAME', 'Karnataka'));
+var bangalore = ee.FeatureCollection('FAO/GAUL/2015/level2')
+  .filter(ee.Filter.eq('ADM2_NAME', 'Bangalore Urban'));
+
+// Time period
+var startDate = '2023-01-01';
+var endDate = '2023-12-31';
+
+// Function to mask clouds in LST data
+function maskClouds(image) {
+  var qa = image.select('QC');
+  var mask = qa.bitwiseAnd(1).eq(0);
+  return image.updateMask(mask);
+}
+
+// Get daytime LST data
+var daytimeLST = ee.ImageCollection('MODIS/061/MOD21A1D')
+  .filterDate(startDate, endDate)
+  .filterBounds(karnataka)
+  .map(maskClouds)
+  .select('LST_1KM');
+
+// Get nighttime LST data
+var nighttimeLST = ee.ImageCollection('MODIS/061/MOD21A1N')
+  .filterDate(startDate, endDate)
+  .filterBounds(karnataka)
+  .map(maskClouds)
+  .select('LST_1KM');
+
+// Get NDVI data
+var ndvi = ee.ImageCollection('MODIS/061/MOD13Q1')
+  .filterDate(startDate, endDate)
+  .filterBounds(karnataka)
+  .select('NDVI');
+
+// Get land cover data
+var landcover = ee.Image('ESA/WorldCover/v200/2021');
+
+// Calculate mean temperatures
+var meanDayLST = daytimeLST.mean();
+var meanNightLST = nighttimeLST.mean();
+var meanNDVI = ndvi.mean();
+
+// Calculate average LST for Karnataka (excluding Bangalore)
+var karnatakaWithoutBangalore = karnataka.geometry()
+  .difference(bangalore.geometry());
+
+var karnatakaDayLST = meanDayLST.reduceRegion({
+  reducer: ee.Reducer.mean(),
+  geometry: karnatakaWithoutBangalore,
+  scale: 1000,
+  maxPixels: 1e9
+});
+
+// Calculate Bangalore LST
+var bangaloreDayLST = meanDayLST.reduceRegion({
+  reducer: ee.Reducer.mean(),
+  geometry: bangalore.geometry(),
+  scale: 1000,
+  maxPixels: 1e9
+});
+
+// Calculate Urban Heat Island Index
+function calculateUHI() {
+  // Get temperature values
+  var bangaloreTemp = ee.Number(bangaloreDayLST.get('LST_1KM')).multiply(0.02);
+  var karnatakaTemp = ee.Number(karnatakaDayLST.get('LST_1KM')).multiply(0.02);
+  
+  // Calculate UHI intensity (Bangalore temp - Karnataka temp)
+  var uhiIntensity = bangaloreTemp.subtract(karnatakaTemp);
+  
+  // Weight by NDVI and urban fraction
+  var urbanAreas = landcover.eq(50); // Code 50 represents urban areas in WorldCover
+  var urbanFraction = urbanAreas.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: bangalore.geometry(),
+    scale: 1000,
+    maxPixels: 1e9
+  }).get('Map');  // Changed from 'b1' to 'Map' which is the correct band name
+  
+  var ndviWeight = meanNDVI.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: bangalore.geometry(),
+    scale: 250,
+    maxPixels: 1e9
+  });
+  
+  // Final UHI index combining temperature difference, NDVI, and urban fraction
+  var uhiIndex = uhiIntensity
+    .multiply(ee.Number(urbanFraction))
+    .multiply(ee.Number(1).subtract(ee.Number(ndviWeight.get('NDVI')).divide(10000)));
+    
+  // Print intermediate values for debugging
+  print('Bangalore Temperature:', bangaloreTemp);
+  print('Karnataka Temperature:', karnatakaTemp);
+  print('Urban Fraction:', urbanFraction);
+  print('NDVI Weight:', ndviWeight.get('NDVI'));
+    
+  return uhiIndex;
+}
+
+// Print results
+print('Urban Heat Island Index:', calculateUHI());
+
+// Visualize the temperature difference
+var tempDiff = meanDayLST.clip(bangalore);
+Map.centerObject(bangalore, 10);
+Map.addLayer(tempDiff, {
+  min: 290,
+  max: 310,
+  palette: ['blue', 'yellow', 'red']
+}, 'Temperature Distribution');
+
+// Add urban areas layer
+var urbanAreasVis = landcover.eq(50).clip(bangalore);
+Map.addLayer(urbanAreasVis, {
+  min: 0,
+  max: 1,
+  palette: ['white', 'red']
+}, 'Urban Areas');
