@@ -2,132 +2,158 @@
 <html lang="en">
 <head>
   <title>Bangalore 3D Map with GeoTIFF</title>
-  <meta charset='utf-8'>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css' />
-  <script src='https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js'></script>
-  <!-- Add GeoTIFF dependencies -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/geotiff@2.0.6/dist-browser/geotiff.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/plotty@0.4.0/dist/plotty.min.js"></script>
+
   <style>
-      body { margin: 0; padding: 0; }
-      html, body, #map { height: 100%; }
+      /* Reset default styles */
+      * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+          font-family: Arial, sans-serif;
+      }
+
+      body {
+          background: #121212; /* Dark background */
+          color: white;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          height: 100vh;
+          text-align: center;
+      }
+
+      h1 {
+          font-size: 22px;
+          margin-top: 10px;
+          color: white;
+      }
+
+      #map {
+          width: 100%;
+          height: 90vh; /* Fullscreen map */
+      }
   </style>
 </head>
 <body>
-<div id="map"></div>
-<script>
-  const MAPTILER_KEY = 'msDVRFNxFaQAvjKxo9zl';
-  const GEOTIFF_URL = 'http://localhost:8000/data/example.tif'; // Update path
 
-  const map = new maplibregl.Map({
-      style: `https://api.maptiler.com/maps/basic-v2/style.json?key=${MAPTILER_KEY}`,
-      center: [77.5946, 12.9716], // Bangalore coordinates
-      zoom: 10,
-      pitch: 45,
-      bearing: -17.6,
-      container: 'map',
-      canvasContextAttributes: {antialias: true}
-  });
+  <h1>Bangalore 3D Map with GeoTIFF Overlay</h1>
+  <div id="map"></div>
 
-  async function loadGeoTIFF() {
-      try {
-          const response = await fetch(GEOTIFF_URL);
-          const arrayBuffer = await response.arrayBuffer();
-          const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
-          const image = await tiff.getImage();
-          const bbox = image.getBoundingBox(); // [minX, minY, maxX, maxY]
-          const data = await image.readRasters();
+  <script>
+      const MAPTILER_KEY = 'msDVRFNxFaQAvjKxo9zl';
+      const GEOTIFF_URL = 'http://localhost:8000/data/example.tif'; 
 
-          // Create canvas for rendering
-          const canvas = document.createElement('canvas');
-          canvas.width = data.width;
-          canvas.height = data.height;
-          const ctx = canvas.getContext('2d');
-          
-          // Disable image smoothing
-          ctx.imageSmoothingEnabled = false;
-          ctx.mozImageSmoothingEnabled = false;
-          ctx.webkitImageSmoothingEnabled = false;
-          ctx.msImageSmoothingEnabled = false;    
+const map = new maplibregl.Map({
+    style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    center: [77.5946, 12.9716],
+    zoom: 10,
+    pitch: 45,
+    bearing: -17.6,
+    container: 'map',
+    canvasContextAttributes: { antialias: true }
+});
 
-          const imageData = ctx.createImageData(data.width, data.height);
-          const minValue = 0; // Adjust based on your data
-          const maxValue = 100; // Adjust based on your data
 
-          // Convert to grayscale (assuming single-band data)
-          for (let i = 0; i < data[0].length; i++) {
-              const value = data[0][i];
-              const normalized = (value - minValue) / (maxValue - minValue) * 255;
-              const idx = i * 4;
-              imageData.data[idx] = normalized;     // R
-              imageData.data[idx + 1] = normalized; // G
-              imageData.data[idx + 2] = normalized; // B
-              imageData.data[idx + 3] = 255;        // A
+
+      async function loadGeoTIFF() {
+          try {
+              const response = await fetch(GEOTIFF_URL);
+              const arrayBuffer = await response.arrayBuffer();
+              const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+              const image = await tiff.getImage();
+              const bbox = image.getBoundingBox();
+              const data = await image.readRasters();
+
+              const canvas = document.createElement('canvas');
+              canvas.width = data.width;
+              canvas.height = data.height;
+              const ctx = canvas.getContext('2d');
+              ctx.imageSmoothingEnabled = false;
+				 ctx.fillStyle = "#28272"; // Raster background color
+				 
+              const imageData = ctx.createImageData(data.width, data.height);
+              for (let i = 0; i < data[0].length; i++) {
+                  const value = data[0][i];
+                  const normalized = (value - 0) / (100 - 0) * 255;
+                  const idx = i * 4;
+                  imageData.data[idx] = normalized;
+                  imageData.data[idx + 1] = normalized;
+                  imageData.data[idx + 2] = normalized;
+                  imageData.data[idx + 3] = 255;
+              }
+
+              ctx.putImageData(imageData, 0, 0);
+              new plotty.plot({
+                  canvas: canvas,
+                  data: data[0], 
+                  width: data.width,
+                  height: data.height,
+                  domain: [0, 1],
+                  colorScale: 'viridis'
+              }).render();
+
+              map.addSource('geotiff', {
+                  type: 'image',
+                  url: canvas.toDataURL(),
+                  coordinates: [
+                      [bbox[0], bbox[3]], 
+                      [bbox[2], bbox[3]], 
+                      [bbox[2], bbox[1]], 
+                      [bbox[0], bbox[1]]  
+                  ]
+              });
+
+             map.addLayer({
+                  id: 'geotiff-layer',
+                  type: 'raster',
+                  source: 'geotiff',
+                  paint: {
+                      'raster-opacity': 0.55,
+                      'raster-resampling': 'linear' // Keeps some smoothness but isn't fully blurry
+                  }
+              }, '3d-buildings');
+              
+          } catch (error) {
+              console.error('Error loading GeoTIFF:', error);
           }
+      }
 
-          ctx.putImageData(imageData, 0, 0);      
-          // Render with Plotty
-          new plotty.plot({
-              canvas: canvas,
-              data: data[0], // First band
-              width: data.width,
-              height: data.height,
-              domain: [0, 1], // Adjust based on your data range
-              colorScale: 'viridis'
-          }).render();
-
-          // Add GeoTIFF as image source
-          map.addSource('geotiff', {
-              type: 'image',
-              url: canvas.toDataURL(),
-              coordinates: [
-                  [bbox[0], bbox[3]], // NW
-                  [bbox[2], bbox[3]], // NE
-                  [bbox[2], bbox[1]], // SE
-                  [bbox[0], bbox[1]]  // SW
-              ]
+      map.on('load', () => {
+          map.addSource('openmaptiles', {
+              url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
+              type: 'vector',
           });
 
           map.addLayer({
-              id: 'geotiff-layer',
-              type: 'raster',
-              source: 'geotiff',
-              paint: {
-                  'raster-opacity': 0.4
+              'id': '3d-buildings',
+              'source': 'openmaptiles',
+              'source-layer': 'building',
+              'type': 'fill-extrusion',
+              'minzoom': 15,
+              'paint': {
+                 "fill-extrusion-color": [
+                      "interpolate",
+                      ["linear"],
+                      ["get", "render_height"],
+                      0, "#617D98",   // Short buildings
+                      50, "#4D6A8C",  // Mid-rise
+                      100, "#89A2C6"  // Tall skyscrapers
+                  ]
+                  , /* White buildings for dark mode */
+                  'fill-extrusion-height': ['case', ['has', 'render_height'], ['get', 'render_height'], 20],
+                  'fill-extrusion-base': ['case', ['has', 'render_min_height'], ['get', 'render_min_height'], 0],
+                  'fill-extrusion-opacity': 0.75
               }
-          }, '3d-buildings'); // Place below 3D buildings
+          });
 
-      } catch (error) {
-          console.error('Error loading GeoTIFF:', error);
-      }
-  }
-
-  map.on('load', () => {
-      // Add 3D buildings layer first
-      map.addSource('openmaptiles', {
-          url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
-          type: 'vector',
+          loadGeoTIFF();
       });
-
-      map.addLayer({
-          'id': '3d-buildings',
-          'source': 'openmaptiles',
-          'source-layer': 'building',
-          'type': 'fill-extrusion',
-          'minzoom': 15,
-          'paint': {
-              'fill-extrusion-color': 'red',
-              'fill-extrusion-height': ['case', ['has', 'render_height'], ['get', 'render_height'], 20],
-              'fill-extrusion-base': ['case', ['has', 'render_min_height'], ['get', 'render_min_height'], 0],
-              'fill-extrusion-opacity': 0.6
-          }
-      });
-
-      // Load GeoTIFF after base map is ready
-      loadGeoTIFF();
-  });
-</script>
+  </script>
 </body>
 </html>
-
