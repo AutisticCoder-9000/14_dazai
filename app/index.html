@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bangalore 3D Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@5.1.0/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.0.6/dist-browser/geotiff.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/plotty@0.4.0/dist/plotty.min.js"></script>
+
+ <style>
+ * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  background: #020817;
+  color: #fff;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#map {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+#controls {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: #0f1729;
+  padding: 8px;
+  border-radius: 6px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 80px;
+  width: 220px;
+  max-width: calc(100vw - 40px);
+}
+
+button {
+  background-color: #0f172a;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  margin: 0;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 32px;
+}
+
+button:hover {
+  background-color: #1e293b;
+}
+
+.active {
+  background-color: #0c205e;
+}
+
+.active:hover {
+  background-color: #1e40af;
+}
+
+#legend-container {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: #0f1729;
+  padding: 8px;
+  border-radius: 6px;
+  z-index: 1;
+  max-width: 220px;
+}
+
+.legend-item {
+  margin-bottom: 8px;
+}
+
+.legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.legend-title {
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: #fff;
+}
+
+.legend-bar {
+  height: 12px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-group {
+  background: #0f1729;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-group button {
+  width: 28px;
+  height: 28px;
+  background: #0f172a;
+  border: none;
+  margin: 0;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: #1e293b;
+}
+
+.maplibregl-ctrl-icon {
+  filter: invert(1);
+}</style></head>
+<body>
+
+  <div id="map"></div>
+
+  <!-- Toggle Controls -->
+  <div id="controls">
+    <button id="toggleGeoTIFF" class="active">Hide GeoTIFF</button>
+    <button id="toggle3DBuildings" class="active">Hide 3D Buildings</button>
+    <button id="toggleLSTLayer" class="active">Hide LST Bangalore 2023</button>
+    <button id="toggleUHILayer" class="active">Hide UHI Bangalore Urban</button>
+ <!-- New UHI toggles -->
+    <button id="toggleUHIChennai" class="active">Hide UHI Chennai</button>
+    <button id="toggleUHIKolkata" class="active">Hide UHI Kolkata</button>
+    <button id="toggleUHIMumbai" class="active">Hide UHI Mumbai Suburban</button>
+    <button id="toggleUHIPune" class="active">Hide UHI Pune</button>
+  </div>
+
+  <!-- Legend Container -->
+  <div id="legend-container"></div>
+
+  <script>
+    const MAPTILER_KEY = 'msDVRFNxFaQAvjKxo9zl';
+    const GEOTIFF_URL = 'http://localhost:8000/data/example.tif';
+    const LST_TIFF_URL = 'http://localhost:8000/data/LST_Bangalore_2023.tif';
+    const UHI_TIFF_URL = 'http://localhost:8000/data/UHI_Export_Bangalore_Urban.tif';
+
+	// Add new UHI URLs
+	    const UHI_CHENNAI_URL = 'http://localhost:8000/data/UHI_Export_Chennai.tif';
+	    const UHI_KOLKATA_URL = 'http://localhost:8000/data/UHI_Export_Kolkata.tif';
+	    const UHI_MUMBAI_URL = 'http://localhost:8000/data/UHI_Export_Mumbai_Suburban.tif';
+	    const UHI_PUNE_URL = 'http://localhost:8000/data/UHI_Export_Pune.tif';
+	
+	    // Add visibility trackers for new layers
+	    let uhiChennaiVisible = true;
+	    let uhiKolkataVisible = true;
+	    let uhiMumbaiVisible = true;
+	    let uhiPuneVisible = true;
+	    
+    const map = new maplibregl.Map({
+      style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+      center: [77.5946, 12.9716],
+      zoom: 10,
+      pitch: 45,
+      bearing: -17.6,
+      container: 'map',
+      canvasContextAttributes: { antialias: true }
+    });
+
+    // Track layer visibility
+    let geotiffLayerVisible = true;
+    let buildingsLayerVisible = true;
+    let lstLayerVisible = true;
+    let uhiLayerVisible = true;
+
+    // Store legend data (domain and colorScale) for each layer
+    const legendInfo = {};
+
+    // Utility to update button appearance and text
+    function updateButton(buttonId, isActive, visibleText, hiddenText) {
+      const btn = document.getElementById(buttonId);
+      if (isActive) {
+        btn.textContent = visibleText;
+        btn.classList.add('active');
+      } else {
+        btn.textContent = hiddenText;
+        btn.classList.remove('active');
+      }
+    }
+
+    // Helper function: Given a color scale name, return a CSS linear-gradient string.
+    // The stops are hardcoded for known scales.
+    function getGradientCSS(colorScale) {
+      let stops = "";
+      if (colorScale === "viridis") {
+        stops = "#440154, #482878, #3e4989, #31688e, #26828e, #1f9e89, #35b779, #6ece58, #b5de2b, #fde725";
+      } else if (colorScale === "inferno") {
+        stops = "#000004, #1b0c41, #4a0c6b, #781c6d, #a52c60, #cf4446, #ed6925, #fb9a06, #f7d13d, #fcffa4";
+      } else if (colorScale === "plasma") {
+        stops = "#0d0887, #5b02a3, #9a179b, #cb4679, #e96d51, #f89441, #f9c84a, #fce24f, #fcffa4";
+      } else {
+        stops = "#000, #fff";
+      }
+      // Convert stops into CSS color stops by evenly spacing them.
+      const stopArray = stops.split(",").map(s => s.trim());
+      let gradientStops = "";
+      stopArray.forEach((color, idx) => {
+        let pos = Math.round((idx / (stopArray.length - 1)) * 100);
+        gradientStops += `${color} ${pos}%`;
+        if (idx !== stopArray.length - 1) gradientStops += ", ";
+      });
+      return `linear-gradient(to right, ${gradientStops})`;
+    }
+
+    // Update the legend container based on the visible layers.
+    function updateLegends() {
+      const legendContainer = document.getElementById('legend-container');
+      legendContainer.innerHTML = ""; // Clear existing legend items
+
+      // For each layer that has legend info and is visible, add a legend item.
+     const layers = [
+              { id: "geotiff-layer", visible: geotiffLayerVisible, title: "GeoTIFF" },
+              { id: "lst-layer", visible: lstLayerVisible, title: "LST Bangalore 2023" },
+              { id: "uhi-layer", visible: uhiLayerVisible, title: "UHI Bangalore Urban" },
+              { id: "uhi-chennai-layer", visible: uhiChennaiVisible, title: "UHI Chennai" },
+              { id: "uhi-kolkata-layer", visible: uhiKolkataVisible, title: "UHI Kolkata" },
+              { id: "uhi-mumbai-layer", visible: uhiMumbaiVisible, title: "UHI Mumbai Suburban" },
+              { id: "uhi-pune-layer", visible: uhiPuneVisible, title: "UHI Pune" }
+            ];
+      
+
+      layers.forEach(layer => {
+        if (layer.visible && legendInfo[layer.id]) {
+          const { domain, colorScale } = legendInfo[layer.id];
+          const legendItem = document.createElement("div");
+          legendItem.className = "legend-item";
+
+          // Title
+          const titleEl = document.createElement("div");
+          titleEl.className = "legend-title";
+          titleEl.textContent = layer.title;
+          legendItem.appendChild(titleEl);
+
+          // Gradient bar
+          const barEl = document.createElement("div");
+          barEl.className = "legend-bar";
+          barEl.style.background = getGradientCSS(colorScale);
+          legendItem.appendChild(barEl);
+
+          // Labels for min and max
+          /*const labelsEl = document.createElement("div");
+          labelsEl.className = "legend-labels";
+          const minLabel = document.createElement("span");
+          minLabel.textContent = domain[0].toFixed(2);
+          const maxLabel = document.createElement("span");
+          maxLabel.textContent = domain[1].toFixed(2);
+          labelsEl.appendChild(minLabel);
+          labelsEl.appendChild(maxLabel);
+          legendItem.appendChild(labelsEl);
+*/
+          legendContainer.appendChild(legendItem);
+        }
+      });
+    }
+
+    // General function to load a GeoTIFF file and add it as a map layer.
+    async function loadGeoTIFF(url, layerId) {
+  try {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+    const image = await tiff.getImage();
+    const bbox = image.getBoundingBox();
+    const data = await image.readRasters();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = image.getWidth();
+    canvas.height = image.getHeight();
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    // Default domain and color scale
+    let domain = [0, 1];
+    let colorScale = 'viridis';
+
+    // For UHI layers, compute the domain and assign the plasma color scale
+    if (layerId.includes('uhi')) {
+      const arr = data[0];
+      let minVal = Infinity, maxVal = -Infinity;
+      for (let i = 0; i < arr.length; i++) {
+        const value = arr[i];
+        if (value < minVal) minVal = value;
+        if (value > maxVal) maxVal = value;
+      }
+      domain = [minVal, maxVal];
+      colorScale = 'plasma'; // Use plasma for all UHI layers
+    } else if (layerId === 'lst-layer') {
+      const arr = data[0];
+      domain = [Math.min(...arr), Math.max(...arr)];
+      colorScale = 'inferno'; // Use inferno for LST layer
+    }
+
+    const imageData = ctx.createImageData(canvas.width, canvas.height);
+    for (let i = 0; i < data[0].length; i++) {
+      const normalized = ((data[0][i] - domain[0]) / (domain[1] - domain[0])) * 255;
+      const idx = i * 4;
+      imageData.data[idx] = normalized;
+      imageData.data[idx + 1] = normalized;
+      imageData.data[idx + 2] = normalized;
+      imageData.data[idx + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Use Plotty to apply the color scale
+    new plotty.plot({
+      canvas: canvas,
+      data: data[0],
+      width: canvas.width,
+      height: canvas.height,
+      domain: domain,
+      colorScale: colorScale
+    }).render();
+
+    // Store legend info for this layer
+    legendInfo[layerId] = { domain, colorScale };
+    updateLegends();
+
+    // Add the image as a map source and layer
+    map.addSource(layerId, {
+      type: 'image',
+      url: canvas.toDataURL(),
+      coordinates: [
+        [bbox[0], bbox[3]],
+        [bbox[2], bbox[3]],
+        [bbox[2], bbox[1]],
+        [bbox[0], bbox[1]]
+      ]
+    });
+
+    map.addLayer({
+      id: layerId,
+      type: 'raster',
+      source: layerId,
+      paint: { 'raster-opacity': 0.55 }
+    }, '3d-buildings');
+
+  } catch (error) {
+    console.error('Error loading GeoTIFF:', error);
+  }
+}
+    map.on('load', () => {
+      // Add vector tiles for 3D buildings.
+      map.addSource('openmaptiles', {
+        url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
+        type: 'vector'
+      });
+
+      map.addLayer({
+        id: '3d-buildings',
+        source: 'openmaptiles',
+        'source-layer': 'building',
+        type: 'fill-extrusion',
+        minzoom: 15,
+        paint: {
+          "fill-extrusion-color": [
+            "interpolate",
+            ["linear"],
+            ["get", "render_height"],
+            0, "#617D98",
+            50, "#4D6A8C",
+            100, "#89A2C6"
+          ],
+          "fill-extrusion-height": ["case", ["has", "render_height"], ["get", "render_height"], 20],
+          "fill-extrusion-base": ["case", ["has", "render_min_height"], ["get", "render_min_height"], 0],
+          "fill-extrusion-opacity": 0.75
+        }
+      });
+
+      // Load each GeoTIFF layer.
+      loadGeoTIFF(GEOTIFF_URL, 'geotiff-layer');
+      loadGeoTIFF(LST_TIFF_URL, 'lst-layer');
+      loadGeoTIFF(UHI_TIFF_URL, 'uhi-layer');
+       loadGeoTIFF(UHI_TIFF_URL, 'uhi-layer');
+      loadGeoTIFF(UHI_CHENNAI_URL, 'uhi-chennai-layer');
+      loadGeoTIFF(UHI_KOLKATA_URL, 'uhi-kolkata-layer');
+      loadGeoTIFF(UHI_MUMBAI_URL, 'uhi-mumbai-layer');
+      loadGeoTIFF(UHI_PUNE_URL, 'uhi-pune-layer');
+    });
+
+    // Toggle button event handlers
+    document.getElementById('toggleGeoTIFF').onclick = () => {
+      geotiffLayerVisible = !geotiffLayerVisible;
+      map.setLayoutProperty('geotiff-layer', 'visibility', geotiffLayerVisible ? 'visible' : 'none');
+      updateButton('toggleGeoTIFF', geotiffLayerVisible, 'Hide GeoTIFF', 'Show GeoTIFF');
+      updateLegends();
+    };
+
+    document.getElementById('toggle3DBuildings').onclick = () => {
+      buildingsLayerVisible = !buildingsLayerVisible;
+      map.setLayoutProperty('3d-buildings', 'visibility', buildingsLayerVisible ? 'visible' : 'none');
+      updateButton('toggle3DBuildings', buildingsLayerVisible, 'Hide 3D Buildings', 'Show 3D Buildings');
+    };
+
+    document.getElementById('toggleLSTLayer').onclick = () => {
+      lstLayerVisible = !lstLayerVisible;
+      map.setLayoutProperty('lst-layer', 'visibility', lstLayerVisible ? 'visible' : 'none');
+      updateButton('toggleLSTLayer', lstLayerVisible, 'Hide LST Bangalore 2023', 'Show LST Bangalore 2023');
+      updateLegends();
+    };
+
+    document.getElementById('toggleUHILayer').onclick = () => {
+      uhiLayerVisible = !uhiLayerVisible;
+      map.setLayoutProperty('uhi-layer', 'visibility', uhiLayerVisible ? 'visible' : 'none');
+      updateButton('toggleUHILayer', uhiLayerVisible, 'Hide UHI Bangalore Urban', 'Show UHI Bangalore Urban');
+      updateLegends();
+    };
+
+    // Add new toggle handlers
+        document.getElementById('toggleUHIChennai').onclick = () => {
+          uhiChennaiVisible = !uhiChennaiVisible;
+          map.setLayoutProperty('uhi-chennai-layer', 'visibility', uhiChennaiVisible ? 'visible' : 'none');
+          updateButton('toggleUHIChennai', uhiChennaiVisible, 'Hide UHI Chennai', 'Show UHI Chennai');
+          updateLegends();
+        };
+    
+        document.getElementById('toggleUHIKolkata').onclick = () => {
+          uhiKolkataVisible = !uhiKolkataVisible;
+          map.setLayoutProperty('uhi-kolkata-layer', 'visibility', uhiKolkataVisible ? 'visible' : 'none');
+          updateButton('toggleUHIKolkata', uhiKolkataVisible, 'Hide UHI Kolkata', 'Show UHI Kolkata');
+          updateLegends();
+        };
+      document.getElementById('toggleUHIMumbai').onclick = () => {
+      uhiMumbaiVisible = !uhiMumbaiVisible;
+      map.setLayoutProperty('uhi-mumbai-layer', 'visibility', uhiMumbaiVisible ? 'visible' : 'none');
+      updateButton('toggleUHIMumbai', uhiMumbaiVisible, 'Hide UHI Mumbai Suburban', 'Show UHI Mumbai Suburban');
+      updateLegends();
+    };
+
+    document.getElementById('toggleUHIPune').onclick = () => {
+      uhiPuneVisible = !uhiPuneVisible;
+      map.setLayoutProperty('uhi-pune-layer', 'visibility', uhiPuneVisible ? 'visible' : 'none');
+      updateButton('toggleUHIPune', uhiPuneVisible, 'Hide UHI Pune', 'Show UHI Pune');
+      updateLegends();
+    };
+    map.addControl(
+          new maplibregl.NavigationControl({
+              visualizePitch: true,
+              showZoom: true,
+              showCompass: true
+          })
+      );
+  </script>
+</body>
+</html>
+
