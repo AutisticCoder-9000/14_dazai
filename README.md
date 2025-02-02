@@ -1,6 +1,4 @@
-Your project looks great! Here's a refined version of the documentation to improve clarity and structure:
 
----
 
 # Urban 3D Heat Map for Indian Cities
 
