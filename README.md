@@ -20,8 +20,12 @@ This project visualizes various environmental layers, including **NDVI** (Normal
 The datasets used in this project were acquired through **Google Earth Engine (GEE)**. We used **Landsat 8 imagery** to analyze urban environments across Indian cities, focusing on Bangalore. The key datasets include:
 
 - **NDVI (Normalized Difference Vegetation Index)**: A measure of vegetation health, derived from the Red (Band 4) and Near Infrared (Band 5) bands of Landsat 8.
+- ![image](https://github.com/user-attachments/assets/f63d71b3-e563-4837-a70d-cc590c6183f2)
+
 - **LST (Land Surface Temperature)**: Obtained from the thermal infrared bands (Band 10) of Landsat 8, essential for understanding temperature variations in urban environments.
+- 
 - **UHI (Urban Heat Island)**: The temperature difference between urban and rural areas, indicating heat retention in cities.
+![image](https://github.com/user-attachments/assets/dc398a76-4711-4f26-a7e0-edcce069d2aa)
 
 ### Data Processing Steps
 
