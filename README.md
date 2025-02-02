@@ -27,8 +27,8 @@ The datasets used in this project were acquired through **Google Earth Engine (G
 
 ### Data Processing Steps
 
-1. **Area of Interest (AOI)**: Defined as the geographic boundary of Bangalore and its surroundings using the FAO/GAUL dataset.
-2. **Landsat 8 Imagery**: Data from June to September 2023 was processed to compute NDVI, LST, and other related variables.
+1. **Area of Interest (AOI)**: Defined using the FAO/GAUL dataset.
+2. **Landsat 8 Imagery**: Data was processed to compute NDVI, LST, and other related variables.
 3. **Preprocessing**: Cloud-masking and scaling factors were applied to the raw satellite data. Adjustments for emissivity variations based on vegetation fraction were made.
 4. **Export**: Processed datasets (NDVI, LST, and UHI) were exported as **GeoTIFF** files for visualization.
 
